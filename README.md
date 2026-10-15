@@ -1,16 +1,16 @@
 # Notebook MVP
 
-This repository currently contains a browser-local MVP scaffold for the Notebook product. It supports notebooks, pages, timestamped fragments, meeting page metadata, text/Markdown document upload/edit/export, local search, JSON export, local deletion, and browser dictation where supported.
+This repository currently contains a browser-local TypeScript MVP scaffold for the Notebook product. It supports notebooks, pages, timestamped fragments, meeting page metadata, text/Markdown document upload/edit/export, local search, JSON export, local deletion, and browser dictation where supported. The client is framework-free and split into an application coordinator (`app.ts`), domain helpers (`src/domain.ts`), IndexedDB persistence (`src/persistence.ts`), and HTML views (`src/views.ts`).
 
 ## Run locally
 
-Requires Node.js 20 or newer. No package installation is needed.
+Requires Node.js 22.6 or newer for native TypeScript type stripping. The build emits browser JavaScript from the type-annotated source into `dist/`.
 
 ```sh
 npm run dev
 ```
 
-Open `http://localhost:3000`. Data is stored in the browser's IndexedDB and stays on that browser profile.
+Open `http://localhost:3000`. Data is stored in the browser's IndexedDB and stays on that browser profile. Run `npm run check` for TypeScript syntax checks.
 
 ## Current boundary
 

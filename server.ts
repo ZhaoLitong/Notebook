@@ -1,10 +1,11 @@
+// @ts-nocheck
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.ts': 'text/typescript', '.css': 'text/css', '.json': 'application/json' };
 createServer(async (req, res) => {
   const requested = new URL(req.url, 'http://localhost').pathname;
   const file = requested === '/' ? 'index.html' : requested.slice(1);

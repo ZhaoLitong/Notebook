@@ -25,6 +25,10 @@ The application does **not** host, join, record, or transcribe the meeting itsel
 - AI-generated content that silently changes the original note.
 - Full Office-document editing or a general-purpose word processor.
 
+### Current scaffold boundary
+
+This specification describes the intended product behavior, not a claim that every requirement is already implemented. The current browser MVP provides local notebooks/pages, timestamped fragments, meeting participants and agenda fields, document upload/edit/export, local search, JSON export, local deletion, browser dictation where available, and IndexedDB persistence. It does not yet provide accounts, server synchronization, tags/projects, fragment editing, Markdown preview, page-level export, or cross-device access. The technical specification records the current architecture and the planned path to those capabilities.
+
 ## 4. Target users and context
 
 The primary user is an individual who wants one dependable place for quick notes and longer-form personal knowledge. They may use a laptop, tablet, or phone and may switch between free-form writing and short fragmented entries. A secondary user context is capturing shorthand while attending an external meeting.

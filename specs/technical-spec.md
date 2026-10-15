@@ -4,18 +4,34 @@
 
 Start with one responsive Progressive Web App (PWA). It runs in desktop and mobile browsers and can be installed from the browser. Keep the client and server interfaces suitable for later Capacitor mobile packaging or a Tauri desktop shell if native shortcuts, widgets, or share actions become important.
 
-## 2. Initial stack
+## 2. MVP stack and evolution
 
-- React, TypeScript, and Next.js.
-- IndexedDB accessed through Dexie (or an equivalent typed wrapper) for local notes and an outbox.
-- PostgreSQL for durable server data.
-- PostgreSQL full-text search for the first search implementation.
-- Object storage only if attachments or retained audio are explicitly introduced.
-- A background job mechanism for transcription and future AI work.
+The current MVP is a framework-free browser application written in TypeScript. `app.ts` coordinates the UI and user actions; focused modules under `src/` own the domain types and selectors, local persistence, and HTML view rendering. TypeScript compiles these ES modules to `dist/`, which the small Node server serves with the static HTML and CSS.
 
-The exact hosting provider is intentionally open. The deployment must provide HTTPS, managed PostgreSQL, backups, and environment-secret management.
+- TypeScript and native browser APIs; no UI framework or runtime dependency.
+- IndexedDB stores the current application state as one record. `LocalStateStore` isolates IndexedDB access so it can later be replaced with versioned entity stores without coupling the views to the database.
+- The outbox is local bookkeeping only. This MVP does not yet send operations to a server or synchronize between devices.
+- Search currently filters the in-memory local state. Server-side search is a later capability.
+- The current MVP has no accounts, hosted database, object storage, transcription service, or background jobs.
 
-## 3. Client structure
+When product complexity warrants it, the client may move to React/Next.js or another component framework, and local storage may move to Dexie or an equivalent typed wrapper. A hosted phase will add authenticated APIs, PostgreSQL, server-side search, deployment, backups, and secret management. These are evolution choices, not requirements for maintaining the current MVP.
+
+The exact hosting provider remains open for the hosted phase. Deployed services must provide HTTPS, managed PostgreSQL, backups, and environment-secret management.
+
+## 3. Client structure and module boundaries
+
+Keep the MVP in small, dependency-light TypeScript modules with one direction of dependency:
+
+```text
+app.ts (startup, event delegation, use cases)
+  ├── src/domain.ts (types, initial state, selectors)
+  ├── src/persistence.ts (IndexedDB adapter)
+  └── src/views.ts (HTML rendering and output escaping)
+```
+
+Views receive state and return markup; they do not read storage or attach event handlers. Persistence reads and writes state; it does not know about the DOM. The application coordinator handles browser events and calls domain/persistence operations. Keep styles in `styles.css`, not inline in markup. Prefer a small view helper for each screen or reusable region over a single large template. Use delegated events from the stable app root so replacing rendered content does not require reattaching per-element handlers.
+
+As the app grows, split use cases and screen views into additional modules by feature. Introduce a framework when component state, accessibility needs, or UI complexity makes it beneficial; do not make a framework a prerequisite for MVP feature work.
 
 The main views are:
 
@@ -27,7 +43,9 @@ The main views are:
 
 Desktop may show the notebook/page list, editor, and metadata panel together. Mobile should prioritize a single capture view with a large input and microphone control. The capture control must remain reachable without scrolling through long pages.
 
-## 4. Offline-first behavior
+## 4. Offline-first target behavior
+
+The sequence below describes the intended synchronized product behavior. In the current MVP, local edits are saved to IndexedDB and recorded in an outbox, but steps 5 and 6 are not implemented.
 
 All writes follow this sequence:
 
