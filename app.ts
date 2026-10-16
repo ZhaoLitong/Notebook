@@ -134,7 +134,7 @@ function makePage(template: Page['template'] = 'general'): void {
 }
 
 function onClick(event: MouseEvent): void {
-  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-result], #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-all, [data-delete]') : null;
+  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-result], #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-all, [data-delete], [data-delete-page]') : null;
   if (!target) return;
 
   if (target.dataset.view || target.dataset.page || target.dataset.doc || target.dataset.result || target.id === 'new-doc' || target.id === 'new-page' || target.id === 'meeting' || target.id === 'quick-note' || target.id === 'new-notebook' || target.id === 'export-doc') {
@@ -161,9 +161,23 @@ function onClick(event: MouseEvent): void {
   } else if (target.id === 'save-fragment') saveFragment();
   else if (target.id === 'dictate') dictate();
   else if (target.dataset.delete) {
-    if (confirm('Delete this fragment?')) {
+    if (confirm('Delete this note?')) {
       const fragment = state.fragments.find((item) => item.id === target.dataset.delete);
       if (fragment) { fragment.deletedAt = now(); queue('fragment.delete', fragment); }
+    }
+  } else if (target.dataset.deletePage) {
+    const page = state.pages.find((item) => item.id === target.dataset.deletePage);
+    if (page && confirm(`Delete "${page.title}" and all its notes?`)) {
+      const fragmentIds = new Set(state.fragments.filter((item) => item.pageId === page.id).map((item) => item.id));
+      state.pages = state.pages.filter((item) => item.id !== page.id);
+      state.fragments = state.fragments.filter((item) => item.pageId !== page.id);
+      delete state.drafts[page.id];
+      state.outbox = state.outbox.filter((item) => {
+        const payload = item.payload as { id?: string } | undefined;
+        return !(item.type.startsWith('fragment.') && payload?.id && fragmentIds.has(payload.id) && item.status !== 'synced');
+      });
+      if (state.selectedPage === page.id) state.selectedPage = state.pages[0]?.id;
+      queue('page.delete', page);
     }
   } else if (target.id === 'new-doc') {
     const timestamp = now();

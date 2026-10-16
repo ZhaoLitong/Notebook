@@ -7,12 +7,13 @@ export function escapeHtml(value: string | undefined = ''): string {
 }
 
 const viewTitle: Record<View, string> = {
-  home: 'Capture and review', docs: 'Documents', search: 'Search', settings: 'Settings',
+  home: 'Capture and review', notes: 'Notes', docs: 'Documents', search: 'Search', settings: 'Settings',
 };
 
 export function renderApp(state: AppState): string {
   const content = state.view === 'home' ? renderHome(state)
-    : state.view === 'docs' ? renderDocuments(state)
+    : state.view === 'notes' ? renderNotes(state)
+      : state.view === 'docs' ? renderDocuments(state)
       : state.view === 'search' ? renderSearch(state)
         : renderSettings();
   return `<div class="shell">${renderSidebar(state.view)}<main class="main"><header class="topbar"><h1>${viewTitle[state.view]}</h1><input class="search" id="global-search" placeholder="Search notes, tags, files" value="${state.view === 'search' ? escapeHtml(state.query || '') : ''}"></header><section class="content${state.view === 'docs' ? ' documents-content' : ''}">${content}</section></main></div>`;
@@ -20,7 +21,7 @@ export function renderApp(state: AppState): string {
 
 function renderSidebar(view: View): string {
   const navigation = [
-    ['home', 'Recent pages'], ['docs', 'Text documents'], ['search', 'Search'], ['settings', 'Settings'],
+    ['home', 'Recent pages'], ['notes', 'All notes'], ['docs', 'Text documents'], ['search', 'Search'], ['settings', 'Settings'],
   ] as const;
   return `<aside class="sidebar"><div class="brand">Notebook</div><nav class="nav">${navigation.map(([key, title]) => `<button data-view="${key}" class="${view === key ? 'active' : ''}">${title}</button>`).join('')}</nav><div class="status" id="sync-status"></div></aside>`;
 }
@@ -39,6 +40,19 @@ function renderEditor(state: AppState, page: Page): string {
 function renderFragment(fragment: AppState['fragments'][number]): string {
   const classifications = ['note', 'action', 'decision', 'question'] as const;
   return `<article class="fragment"><div class="fragment-head"><span>${new Date(fragment.createdAt).toLocaleString()}</span><span><select data-classify="${fragment.id}" aria-label="Classification">${classifications.map((value) => `<option ${fragment.classification === value ? 'selected' : ''}>${value}</option>`).join('')}</select> <button class="danger" data-delete="${fragment.id}">Delete</button></span></div><p>${escapeHtml(fragment.content)}</p></article>`;
+}
+
+function renderNotes(state: AppState): string {
+  const notes = state.fragments
+    .filter((fragment) => !fragment.deletedAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const pages = [...state.pages].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const items = pages.map((page) => {
+    const pageNotes = notes.filter((note) => note.pageId === page.id);
+    const details = [state.drafts[page.id], page.meeting.agenda].filter((value) => value?.trim()).join('\n');
+    return `<section class="note-page"><div class="note-meta"><div><strong>${escapeHtml(page.title || 'Untitled page')}</strong><div>${new Date(page.updatedAt).toLocaleString()} &middot; ${pageNotes.length} saved ${pageNotes.length === 1 ? 'note' : 'notes'}</div></div><button class="danger" data-delete-page="${page.id}" aria-label="Delete page ${escapeHtml(page.title || 'Untitled page')}">Delete page</button></div>${details ? `<p>${escapeHtml(details)}</p>` : ''}${pageNotes.map((note) => `<article class="note-item"><div class="note-meta"><span>${escapeHtml(note.classification)} &middot; ${new Date(note.createdAt).toLocaleString()}</span><button class="danger" data-delete="${note.id}" aria-label="Delete note">Delete note</button></div><p>${escapeHtml(note.content)}</p></article>`).join('')}</section>`;
+  }).join('');
+  return `<div class="toolbar"><h2>All notes</h2><span class="muted">${pages.length} ${pages.length === 1 ? 'page' : 'pages'} &middot; ${notes.length} saved ${notes.length === 1 ? 'note' : 'notes'}</span></div><div class="note-list">${items || '<div class="empty">No pages or notes yet.</div>'}</div>`;
 }
 
 function renderDocuments(state: AppState): string {

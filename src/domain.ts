@@ -1,4 +1,4 @@
-export type View = 'home' | 'docs' | 'search' | 'settings';
+export type View = 'home' | 'notes' | 'docs' | 'search' | 'settings';
 export type Classification = 'note' | 'action' | 'decision' | 'question';
 
 export interface Notebook { id: string; name: string }

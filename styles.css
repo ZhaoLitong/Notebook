@@ -50,6 +50,13 @@ button { cursor: pointer; border: 0; }
 .fragment:last-child { border-bottom: 0; }
 .fragment-head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
 .fragment p { white-space: pre-wrap; margin: 8px 0; }
+.note-list { border-top: 1px solid var(--line); }
+.note-page { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.note-page > p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0 0; }
+.note-item { padding: 14px 0 0 16px; border-left: 2px solid var(--line); margin: 14px 0 0; }
+.note-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
+.note-meta span { min-width: 0; overflow-wrap: anywhere; }
+.note-item p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0 0; }
 .tag { font-size: 11px; background: #e3f2f0; color: #176e6c; border-radius: 99px; padding: 4px 8px; }
 .field { display: grid; gap: 6px; margin-bottom: 14px; }
 .field label { font-size: 12px; font-weight: 700; color: var(--muted); }
