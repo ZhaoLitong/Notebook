@@ -12,10 +12,10 @@ const viewTitle: Record<View, Parameters<typeof t>[1]> = {
   home: 'homeTitle', notes: 'notesTitle', docs: 'docsTitle', search: 'searchTitle', settings: 'settingsTitle',
 };
 
-export function renderApp(state: AppState): string {
+export function renderApp(state: AppState, documentMode: 'edit' | 'split' | 'preview' = 'split'): string {
   const content = state.view === 'home' ? renderHome(state)
     : state.view === 'notes' ? renderNotes(state)
-      : state.view === 'docs' ? renderDocuments(state)
+      : state.view === 'docs' ? renderDocuments(state, documentMode)
       : state.view === 'search' ? renderSearch(state)
         : renderSettings(state);
   return `<div class="shell">${renderSidebar(state)}<main class="main"><header class="topbar"><h1>${t(state.language, viewTitle[state.view])}</h1><input class="search" id="global-search" aria-label="${t(state.language, 'searchPlaceholder')}" placeholder="${t(state.language, 'searchPlaceholder')}" value="${state.view === 'search' ? escapeHtml(state.query || '') : ''}"></header><section class="content${state.view === 'docs' ? ' documents-content' : ''}">${content}</section></main></div>`;
@@ -59,11 +59,11 @@ function renderNotes(state: AppState): string {
   return `<div class="toolbar"><h2>${t(state.language, 'allNotes')}</h2><span class="muted">${pages.length} ${t(state.language, pages.length === 1 ? 'page' : 'pages')} &middot; ${notes.length} ${t(state.language, notes.length === 1 ? 'savedNote' : 'savedNotes')}</span></div><div class="note-list">${items || `<div class="empty">${t(state.language, 'noNotes')}</div>`}</div>`;
 }
 
-function renderDocuments(state: AppState): string {
+function renderDocuments(state: AppState, documentMode: 'edit' | 'split' | 'preview'): string {
   const doc = state.documents.find((item) => item.id === state.activeDoc) || state.documents[0];
   const language = state.language;
   const list = state.documents.map((item) => `<button class="doc-item" data-doc="${item.id}"><strong>${escapeHtml(item.filename)}</strong><div class="muted">${formatDate(item.updatedAt, language)}</div></button>`).join('') || `<div class="muted">${t(language, 'noDocuments')}</div>`;
-  const editor = doc ? `<div class="field"><label for="doc-name">${t(language, 'filename')}</label><input id="doc-name" value="${escapeHtml(doc.filename)}"></div><textarea class="doc-editor" id="doc-content" aria-label="${t(language, 'textDocuments')}">${escapeHtml(doc.content)}</textarea><div class="actions document-actions"><button class="primary" id="save-doc">${t(language, 'saveDocument')}</button><button class="secondary" id="export-doc">${t(language, 'export')}</button></div>` : `<div class="empty">${t(language, 'chooseDocument')}</div>`;
+  const editor = doc ? `<div class="field"><label for="doc-name">${t(language, 'filename')}</label><input id="doc-name" value="${escapeHtml(doc.filename)}"></div><div class="doc-view-modes" role="group" aria-label="${t(language, 'documentView')}">${(['edit', 'split', 'preview'] as const).map((mode) => `<button type="button" data-doc-mode="${mode}" aria-pressed="${documentMode === mode}">${t(language, mode)}</button>`).join('')}</div><div class="document-workspace" data-mode="${documentMode}"><section class="document-pane document-edit"><h3>${t(language, 'edit')}</h3><textarea class="doc-editor" id="doc-content" aria-label="${t(language, 'textDocuments')}">${escapeHtml(doc.content)}</textarea></section><section class="document-pane document-preview"><h3>${t(language, 'preview')}</h3><div class="markdown-preview" id="markdown-preview"></div></section></div><div class="actions document-actions"><button class="primary" id="save-doc">${t(language, 'saveDocument')}</button><button class="secondary" id="export-doc">${t(language, 'export')}</button></div>` : `<div class="empty">${t(language, 'chooseDocument')}</div>`;
   return `<div class="toolbar"><div><h2>${t(language, 'textDocuments')}</h2><div class="muted">${t(language, 'saveDocumentsHint')}</div></div><div class="actions"><label class="primary">${t(language, 'upload')}<input id="upload" type="file" accept=".txt,.md,text/plain,text/markdown" hidden></label><button class="secondary" id="new-doc">${t(language, 'newDocument')}</button></div></div><div class="doc-grid"><div class="doc-list">${list}</div><div class="panel">${editor}</div></div>`;
 }
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 // The server runs from dist/, while index.html and styles.css stay at the project root.
 const root = fileURLToPath(new URL('../', import.meta.url));
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.ts': 'text/typescript', '.css': 'text/css', '.json': 'application/json' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.ts': 'text/typescript', '.css': 'text/css', '.json': 'application/json' };
 createServer(async (req, res) => {
   const requested = new URL(req.url, 'http://localhost').pathname;
   const file = requested === '/' ? 'index.html' : requested.slice(1);

@@ -1,3 +1,5 @@
+import createDOMPurify from 'dompurify';
+import { marked } from 'marked';
 import { AppState, Classification, createId, currentPage, initialState, Language, now, Page, View } from './src/domain.js';
 import { pageTitle, t } from './src/i18n.js';
 import { DataCategory, localDataGroups } from './src/local-data.js';
@@ -22,12 +24,47 @@ const root = document.querySelector<HTMLElement>('#app');
 const store = new LocalStateStore();
 let state: AppState = structuredClone(initialState);
 const legacyDocuments = new Map<string, AppState['documents'][number]>();
+const purifier = createDOMPurify(window);
+let documentMode: 'edit' | 'split' | 'preview' = window.matchMedia('(max-width: 1350px)').matches ? 'edit' : 'split';
 
 function render(): void {
   if (!root) return;
   document.documentElement.lang = state.language === 'zh' ? 'zh-CN' : 'en';
-  root.innerHTML = renderApp(state);
+  root.innerHTML = renderApp(state, documentMode);
   renderStatus();
+  updateMarkdownPreview();
+}
+
+function updateMarkdownPreview(): void {
+  const source = root?.querySelector<HTMLTextAreaElement>('#doc-content');
+  const preview = root?.querySelector<HTMLElement>('#markdown-preview');
+  if (!source || !preview) return;
+  preview.classList.toggle('is-empty', !source.value.trim());
+  if (!source.value.trim()) {
+    preview.textContent = t(state.language, 'emptyPreview');
+    return;
+  }
+  preview.innerHTML = purifier.sanitize(marked.parse(source.value, { async: false }), {
+    USE_PROFILES: { html: true },
+    ALLOW_DATA_ATTR: false,
+    FORBID_ATTR: ['id', 'name'],
+    FORBID_TAGS: ['button', 'form', 'input', 'label', 'select', 'textarea'],
+  });
+  preview.querySelectorAll('a').forEach((link) => {
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+  });
+}
+
+function setDocumentMode(mode: 'edit' | 'split' | 'preview'): void {
+  documentMode = mode;
+  const workspace = root?.querySelector<HTMLElement>('.document-workspace');
+  if (workspace) workspace.dataset.mode = mode;
+  root?.querySelectorAll<HTMLButtonElement>('[data-doc-mode]').forEach((button) => {
+    const selected = button.dataset.docMode === mode;
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  if (mode === 'preview') updateMarkdownPreview();
 }
 
 function persist(): void {
@@ -177,7 +214,7 @@ function deleteLocalData(categories: DataCategory[], all = false): void {
 }
 
 function onClick(event: MouseEvent): void {
-  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-result], #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-selected, #delete-all, [data-delete], [data-delete-page]') : null;
+  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-doc-mode], [data-result], #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-selected, #delete-all, [data-delete], [data-delete-page]') : null;
   if (!target) return;
 
   if (target.dataset.view || target.dataset.page || target.dataset.doc || target.dataset.result || target.id === 'new-doc' || target.id === 'new-page' || target.id === 'meeting' || target.id === 'quick-note' || target.id === 'new-notebook' || target.id === 'export-doc') {
@@ -191,6 +228,7 @@ function onClick(event: MouseEvent): void {
   if (target.dataset.view) { state.view = target.dataset.view as View; render(); }
   else if (target.dataset.page) { state.selectedPage = target.dataset.page; state.view = 'home'; render(); }
   else if (target.dataset.doc) { state.activeDoc = target.dataset.doc; render(); }
+  else if (target.dataset.docMode === 'edit' || target.dataset.docMode === 'split' || target.dataset.docMode === 'preview') setDocumentMode(target.dataset.docMode);
   else if (target.dataset.result) {
     state.selectedPage = target.dataset.result; state.view = 'home';
     render();
@@ -224,7 +262,7 @@ function onClick(event: MouseEvent): void {
   } else if (target.id === 'new-doc') {
     const timestamp = now();
     const doc = { id: createId(), filename: 'untitled.md', content: '', createdAt: timestamp, updatedAt: timestamp };
-    state.documents.unshift(doc); state.activeDoc = doc.id; render();
+    state.documents.unshift(doc); state.activeDoc = doc.id; documentMode = 'edit'; render();
   } else if (target.id === 'save-doc') void saveDocument();
   else if (target.id === 'export-doc') {
     syncActiveDocumentFromEditor();
@@ -242,6 +280,8 @@ function onInput(event: Event): void {
   if (event.target instanceof HTMLTextAreaElement && event.target.id === 'capture') {
     const page = currentPage(state);
     if (page) { state.drafts[page.id] = event.target.value; persist(); }
+  } else if (event.target instanceof HTMLTextAreaElement && event.target.id === 'doc-content') {
+    updateMarkdownPreview();
   }
 }
 
@@ -339,7 +379,7 @@ async function importDocument(file?: File): Promise<void> {
   if (!file) return;
   const timestamp = now();
   const doc = { id: createId(), filename: file.name, content: await file.text(), createdAt: timestamp, updatedAt: timestamp };
-  state.documents.unshift(doc); state.activeDoc = doc.id; render();
+  state.documents.unshift(doc); state.activeDoc = doc.id; documentMode = 'edit'; render();
 }
 
 function dictate(): void {
