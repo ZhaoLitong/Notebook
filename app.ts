@@ -1,4 +1,5 @@
-import { AppState, Classification, createId, currentPage, initialState, now, Page, View } from './src/domain.js';
+import { AppState, Classification, createId, currentPage, initialState, Language, now, Page, View } from './src/domain.js';
+import { pageTitle, t } from './src/i18n.js';
 import { LocalStateStore } from './src/persistence.js';
 import { renderApp } from './src/views.js';
 
@@ -23,6 +24,7 @@ const legacyDocuments = new Map<string, AppState['documents'][number]>();
 
 function render(): void {
   if (!root) return;
+  document.documentElement.lang = state.language === 'zh' ? 'zh-CN' : 'en';
   root.innerHTML = renderApp(state);
   renderStatus();
 }
@@ -72,7 +74,8 @@ function discardEmptyActiveDocument(): void {
 
 function isEmptyPage(page: Page): boolean {
   const defaultTitle = page.template === 'meeting' ? 'Meeting minutes' : 'Untitled page';
-  return (!page.title.trim() || page.title === defaultTitle)
+  const chineseDefault = page.template === 'meeting' ? t('zh', 'meetingMinutes') : t('zh', 'untitledPage');
+  return (!page.title.trim() || page.title === defaultTitle || page.title === chineseDefault)
     && !page.meeting.participants.trim()
     && !page.meeting.agenda.trim()
     && !state.drafts[page.id]?.trim()
@@ -106,8 +109,8 @@ function queue(type: string, payload: unknown): void {
 function renderStatus(): void {
   const status = document.querySelector<HTMLElement>('#sync-status');
   if (status) status.textContent = navigator.onLine
-    ? `${state.outbox.filter((item) => item.status !== 'synced').length} pending sync`
-    : 'Offline - changes saved locally';
+    ? `${state.outbox.filter((item) => item.status !== 'synced').length} ${t(state.language, 'pendingSync')}`
+    : t(state.language, 'offlineSaved');
 }
 
 function toast(message: string): void {
@@ -160,18 +163,18 @@ function onClick(event: MouseEvent): void {
   else if (target.id === 'meeting') makePage('meeting');
   else if (target.id === 'quick-note') { if (!currentPage(state)) makePage(); else document.querySelector<HTMLTextAreaElement>('#capture')?.focus(); }
   else if (target.id === 'new-notebook') {
-    const name = prompt('Notebook name');
+    const name = prompt(t(state.language, 'notebookName'));
     if (name) { const notebook = { id: createId(), name }; state.notebooks.push(notebook); queue('notebook.create', notebook); }
   } else if (target.id === 'save-fragment') saveFragment();
   else if (target.id === 'dictate') dictate();
   else if (target.dataset.delete) {
-    if (confirm('Delete this note?')) {
+    if (confirm(t(state.language, 'confirmDeleteNote'))) {
       const fragment = state.fragments.find((item) => item.id === target.dataset.delete);
       if (fragment) { fragment.deletedAt = now(); queue('fragment.delete', fragment); }
     }
   } else if (target.dataset.deletePage) {
     const page = state.pages.find((item) => item.id === target.dataset.deletePage);
-    if (page && confirm(`Delete "${page.title}" and all its notes?`)) {
+    if (page && confirm(`${t(state.language, 'confirmDeletePage')} "${pageTitle(page, state.language)}"`)) {
       const fragmentIds = new Set(state.fragments.filter((item) => item.pageId === page.id).map((item) => item.id));
       state.pages = state.pages.filter((item) => item.id !== page.id);
       state.fragments = state.fragments.filter((item) => item.pageId !== page.id);
@@ -193,8 +196,9 @@ function onClick(event: MouseEvent): void {
     const doc = state.documents.find((item) => item.id === state.activeDoc);
     if (doc) download(doc.filename, doc.content);
   } else if (target.id === 'export-all') download('notebook-export.json', JSON.stringify(state, null, 2), 'application/json');
-  else if (target.id === 'delete-all' && confirm('Delete all local notebook data?')) {
-    state = structuredClone(initialState); legacyDocuments.clear(); persist(); render(); toast('Local data deleted');
+  else if (target.id === 'delete-all' && confirm(t(state.language, 'confirmDeleteAll'))) {
+    const language = state.language;
+    state = { ...structuredClone(initialState), language }; legacyDocuments.clear(); persist(); render(); toast(t(state.language, 'localDataDeleted'));
   }
 }
 
@@ -207,14 +211,21 @@ function onInput(event: Event): void {
 
 function onChange(event: Event): void {
   const target = event.target;
-  if (target instanceof HTMLInputElement && target.id === 'upload') {
+  if (target instanceof HTMLSelectElement && target.id === 'language') {
+    state.language = target.value as Language;
+    persist(); render();
+  } else if (target instanceof HTMLInputElement && target.id === 'upload') {
     void importDocument(target.files?.[0]);
   } else if (target instanceof HTMLSelectElement && target.dataset.classify) {
     const fragment = state.fragments.find((item) => item.id === target.dataset.classify);
     if (fragment) { fragment.classification = target.value as Classification; fragment.updatedAt = now(); queue('fragment.update', fragment); }
   } else if (target instanceof HTMLInputElement && target.id === 'page-title') {
     const page = currentPage(state);
-    if (page) { page.title = target.value; page.updatedAt = now(); queue('page.update', page); }
+    if (page) {
+      const defaultTitle = page.template === 'meeting' ? 'meetingMinutes' : 'untitledPage';
+      page.title = target.value === t(state.language, defaultTitle) ? (page.template === 'meeting' ? 'Meeting minutes' : 'Untitled page') : target.value;
+      page.updatedAt = now(); queue('page.update', page);
+    }
   } else if ((target instanceof HTMLInputElement && target.id === 'participants') || (target instanceof HTMLTextAreaElement && target.id === 'agenda')) {
     const page = currentPage(state);
     if (page) {
@@ -244,7 +255,7 @@ function saveFragment(): void {
   page.updatedAt = timestamp;
   state.drafts[page.id] = '';
   queue('fragment.create', fragment);
-  toast('Saved locally');
+  toast(t(state.language, 'savedLocally'));
 }
 
 async function saveDocument(): Promise<void> {
@@ -264,7 +275,7 @@ async function saveDocument(): Promise<void> {
   };
   if (!picker.showSaveFilePicker) {
     download(filename, content.value);
-    toast('Download started');
+    toast(t(state.language, 'downloadStarted'));
     return;
   }
   try {
@@ -278,10 +289,10 @@ async function saveDocument(): Promise<void> {
     legacyDocuments.delete(doc.id);
     persist();
     render();
-    toast('Saved to device');
+    toast(t(state.language, 'savedToDevice'));
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return;
-    toast('Could not save document');
+    toast(t(state.language, 'saveFailed'));
   }
 }
 
@@ -295,7 +306,7 @@ async function importDocument(file?: File): Promise<void> {
 function dictate(): void {
   const speechWindow = window as SpeechRecognitionWindow;
   const Speech = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-  if (!Speech) { toast('Dictation is unavailable. You can type your note instead.'); return; }
+  if (!Speech) { toast(t(state.language, 'dictateUnavailable')); return; }
   const recognition = new Speech();
   recognition.lang = 'en-US'; recognition.interimResults = false;
   recognition.onresult = (event) => {
@@ -304,8 +315,8 @@ function dictate(): void {
     capture.value += (capture.value ? ' ' : '') + event.results[0][0].transcript;
     capture.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  recognition.onerror = () => toast('Dictation failed. Typed capture remains available.');
-  recognition.start(); toast('Listening');
+  recognition.onerror = () => toast(t(state.language, 'dictateFailed'));
+  recognition.start(); toast(t(state.language, 'listening'));
 }
 
 root?.addEventListener('click', onClick);
@@ -314,7 +325,7 @@ root?.addEventListener('change', onChange);
 root?.addEventListener('keydown', onKeyDown);
 window.addEventListener('online', () => {
   state.outbox.forEach((item) => { if (item.status === 'offline') item.status = 'pending'; });
-  persist(); renderStatus(); toast('Online - pending changes ready to sync');
+  persist(); renderStatus(); toast(t(state.language, 'onlineReady'));
 });
 window.addEventListener('offline', renderStatus);
 window.addEventListener('beforeunload', () => {
@@ -331,7 +342,7 @@ async function start(): Promise<void> {
     state.outbox = state.outbox.filter((item) => !item.type.startsWith('document.'));
     discardEmptyPages(state.pages);
   } catch {
-    if (root) root.textContent = 'This browser does not support local storage.';
+    if (root) root.textContent = t(state.language, 'storageUnavailable');
     return;
   }
   render();
