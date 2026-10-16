@@ -26,11 +26,13 @@ let state: AppState = structuredClone(initialState);
 const legacyDocuments = new Map<string, AppState['documents'][number]>();
 const purifier = createDOMPurify(window);
 let documentMode: 'edit' | 'split' | 'preview' = window.matchMedia('(max-width: 1350px)').matches ? 'edit' : 'split';
+let savedDocument = { id: '', filename: '', content: '' };
+let draggingFile = false;
 
 function render(): void {
   if (!root) return;
   document.documentElement.lang = state.language === 'zh' ? 'zh-CN' : 'en';
-  root.innerHTML = renderApp(state, documentMode);
+  root.innerHTML = renderApp(state, documentMode, new Set(legacyDocuments.keys()));
   renderStatus();
   updateMarkdownPreview();
 }
@@ -94,6 +96,31 @@ function syncActiveDocumentFromEditor(): void {
     doc.filename = name.value;
     doc.content = content.value;
   }
+}
+
+function activeDocument(): AppState['documents'][number] | undefined {
+  return state.documents.find((item) => item.id === state.activeDoc);
+}
+
+function hasUnsavedDocument(): boolean {
+  syncActiveDocumentFromEditor();
+  const doc = activeDocument();
+  return !!doc && (doc.id !== savedDocument.id || doc.filename !== savedDocument.filename || doc.content !== savedDocument.content)
+    && !!(doc.content.trim() || doc.filename !== 'untitled.md');
+}
+
+function allowDocumentReplacement(): boolean {
+  return !hasUnsavedDocument() || confirm(t(state.language, 'unsavedDocument'));
+}
+
+function replaceDocument(doc: AppState['documents'][number]): void {
+  state.documents = [doc, ...state.documents.filter((item) => item.id !== doc.id && legacyDocuments.has(item.id))];
+  state.activeDoc = doc.id;
+  savedDocument = legacyDocuments.has(doc.id)
+    ? { id: doc.id, filename: doc.filename, content: doc.content }
+    : { id: '', filename: '', content: '' };
+  documentMode = 'edit';
+  render();
 }
 
 function discardEmptyActiveDocument(): void {
@@ -217,6 +244,9 @@ function onClick(event: MouseEvent): void {
   const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-doc-mode], [data-result], #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-selected, #delete-all, [data-delete], [data-delete-page]') : null;
   if (!target) return;
 
+  if (state.view === 'docs' && target.dataset.view && target.dataset.view !== 'docs' && !allowDocumentReplacement()) return;
+  if (target.id === 'new-doc' && !allowDocumentReplacement()) return;
+
   if (target.dataset.view || target.dataset.page || target.dataset.doc || target.dataset.result || target.id === 'new-doc' || target.id === 'new-page' || target.id === 'meeting' || target.id === 'quick-note' || target.id === 'new-notebook' || target.id === 'export-doc') {
     discardEmptyActiveDocument();
   }
@@ -262,12 +292,15 @@ function onClick(event: MouseEvent): void {
   } else if (target.id === 'new-doc') {
     const timestamp = now();
     const doc = { id: createId(), filename: 'untitled.md', content: '', createdAt: timestamp, updatedAt: timestamp };
-    state.documents.unshift(doc); state.activeDoc = doc.id; documentMode = 'edit'; render();
+    replaceDocument(doc);
   } else if (target.id === 'save-doc') void saveDocument();
   else if (target.id === 'export-doc') {
     syncActiveDocumentFromEditor();
     const doc = state.documents.find((item) => item.id === state.activeDoc);
-    if (doc) download(doc.filename, doc.content);
+    if (doc) {
+      download(doc.filename, doc.content);
+      savedDocument = { id: doc.id, filename: doc.filename, content: doc.content };
+    }
   } else if (target.id === 'export-all') download('notebook-export.json', JSON.stringify(state, null, 2), 'application/json');
   else if (target.id === 'delete-selected') {
     const selected = [...(root?.querySelectorAll<HTMLInputElement>('[data-delete-category]:checked') || [])]
@@ -281,7 +314,10 @@ function onInput(event: Event): void {
     const page = currentPage(state);
     if (page) { state.drafts[page.id] = event.target.value; persist(); }
   } else if (event.target instanceof HTMLTextAreaElement && event.target.id === 'doc-content') {
+    syncActiveDocumentFromEditor();
     updateMarkdownPreview();
+  } else if (event.target instanceof HTMLInputElement && event.target.id === 'doc-name') {
+    syncActiveDocumentFromEditor();
   }
 }
 
@@ -295,6 +331,11 @@ function onChange(event: Event): void {
     if (button) button.disabled = !root?.querySelector('[data-delete-category]:checked');
   } else if (target instanceof HTMLInputElement && target.id === 'upload') {
     void importDocument(target.files?.[0]);
+    target.value = '';
+  } else if (target instanceof HTMLSelectElement && target.id === 'stored-doc' && target.value) {
+    if (!allowDocumentReplacement()) { target.value = ''; return; }
+    const doc = state.documents.find((item) => item.id === target.value);
+    if (doc) replaceDocument(doc);
   } else if (target instanceof HTMLSelectElement && target.dataset.classify) {
     const fragment = state.fragments.find((item) => item.id === target.dataset.classify);
     if (fragment) { fragment.classification = target.value as Classification; fragment.updatedAt = now(); queue('fragment.update', fragment); }
@@ -318,6 +359,7 @@ function onChange(event: Event): void {
 function onKeyDown(event: KeyboardEvent): void {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.id === 'global-search' && event.key === 'Enter') {
+    if (state.view === 'docs' && !allowDocumentReplacement()) return;
     discardEmptyActiveDocument(); discardEmptyCurrentPage(); state.query = target.value; state.view = 'search'; render();
   } else if (target instanceof HTMLTextAreaElement && target.id === 'capture' && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault(); saveFragment();
@@ -354,6 +396,9 @@ async function saveDocument(): Promise<void> {
   };
   if (!picker.showSaveFilePicker) {
     download(filename, content.value);
+    doc.filename = filename;
+    doc.content = content.value;
+    savedDocument = { id: doc.id, filename, content: content.value };
     toast(t(state.language, 'downloadStarted'));
     return;
   }
@@ -365,6 +410,7 @@ async function saveDocument(): Promise<void> {
     doc.filename = handle.name;
     doc.content = content.value;
     doc.updatedAt = now();
+    savedDocument = { id: doc.id, filename: doc.filename, content: doc.content };
     legacyDocuments.delete(doc.id);
     persist();
     render();
@@ -377,9 +423,11 @@ async function saveDocument(): Promise<void> {
 
 async function importDocument(file?: File): Promise<void> {
   if (!file) return;
+  if (!/\.(md|markdown|txt)$/i.test(file.name)) { toast(t(state.language, 'invalidDocument')); return; }
+  if (!allowDocumentReplacement()) return;
   const timestamp = now();
   const doc = { id: createId(), filename: file.name, content: await file.text(), createdAt: timestamp, updatedAt: timestamp };
-  state.documents.unshift(doc); state.activeDoc = doc.id; documentMode = 'edit'; render();
+  replaceDocument(doc);
 }
 
 function dictate(): void {
@@ -402,12 +450,34 @@ root?.addEventListener('click', onClick);
 root?.addEventListener('input', onInput);
 root?.addEventListener('change', onChange);
 root?.addEventListener('keydown', onKeyDown);
+root?.addEventListener('dragenter', (event) => {
+  if (state.view !== 'docs' || !event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  draggingFile = true;
+  root.querySelector('#document-drop-zone')?.classList.add('drag-over');
+});
+root?.addEventListener('dragover', (event) => {
+  if (state.view === 'docs' && event.dataTransfer?.types.includes('Files')) event.preventDefault();
+});
+root?.addEventListener('dragleave', (event) => {
+  if (!draggingFile || root?.contains(event.relatedTarget as Node)) return;
+  draggingFile = false;
+  root?.querySelector('#document-drop-zone')?.classList.remove('drag-over');
+});
+root?.addEventListener('drop', (event) => {
+  if (state.view !== 'docs') return;
+  event.preventDefault();
+  draggingFile = false;
+  root.querySelector('#document-drop-zone')?.classList.remove('drag-over');
+  void importDocument(event.dataTransfer?.files[0]);
+});
 window.addEventListener('online', () => {
   state.outbox.forEach((item) => { if (item.status === 'offline') item.status = 'pending'; });
   persist(); renderStatus(); toast(t(state.language, 'onlineReady'));
 });
 window.addEventListener('offline', renderStatus);
-window.addEventListener('beforeunload', () => {
+window.addEventListener('beforeunload', (event) => {
+  if (hasUnsavedDocument()) event.preventDefault();
   discardEmptyActiveDocument();
   discardEmptyCurrentPage();
 });
@@ -419,6 +489,8 @@ async function start(): Promise<void> {
     state.view = 'home';
     for (const doc of state.documents) legacyDocuments.set(doc.id, structuredClone(doc));
     state.activeDoc = state.documents.find((doc) => doc.id === state.activeDoc)?.id ?? state.documents[0]?.id;
+    const doc = activeDocument();
+    if (doc) savedDocument = { id: doc.id, filename: doc.filename, content: doc.content };
     state.outbox = state.outbox.filter((item) => !item.type.startsWith('document.'));
     discardEmptyPages(state.pages);
   } catch {
