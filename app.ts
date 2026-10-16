@@ -1,5 +1,6 @@
 import { AppState, Classification, createId, currentPage, initialState, Language, now, Page, View } from './src/domain.js';
 import { pageTitle, t } from './src/i18n.js';
+import { DataCategory, localDataGroups } from './src/local-data.js';
 import { LocalStateStore } from './src/persistence.js';
 import { renderApp } from './src/views.js';
 
@@ -141,8 +142,42 @@ function makePage(template: Page['template'] = 'general'): void {
   queue('page.create', page);
 }
 
+function deleteLocalData(categories: DataCategory[], all = false): void {
+  const groups = localDataGroups(state).filter((group) => categories.includes(group.id));
+  if (!groups.length) return;
+  const message = `${t(state.language, all ? 'confirmDeleteAllData' : 'confirmDeleteSelected')}\n\n${groups.map((group) => `${group.label}: ${group.detail}`).join('\n')}\n\n${t(state.language, 'deviceFilesUnaffected')}`;
+  if (!confirm(message)) return;
+
+  if (all) {
+    state = { ...structuredClone(initialState), view: 'settings' };
+    legacyDocuments.clear();
+  } else {
+    if (categories.includes('notebook')) {
+      state.notebooks = structuredClone(initialState.notebooks);
+      state.pages = [];
+      state.fragments = [];
+      state.drafts = {};
+      state.selectedPage = undefined;
+      state.query = undefined;
+      state.outbox = state.outbox.filter((item) => !/^(notebook|page|fragment)\./.test(item.type));
+    }
+    if (categories.includes('documents')) {
+      state.documents = [];
+      state.activeDoc = undefined;
+      legacyDocuments.clear();
+      state.outbox = state.outbox.filter((item) => !item.type.startsWith('document.'));
+    }
+    if (categories.includes('sync')) state.outbox = [];
+    if (categories.includes('preferences')) {
+      state.language = initialState.language;
+      state.query = undefined;
+    }
+  }
+  persist(); render(); toast(t(state.language, 'localDataDeleted'));
+}
+
 function onClick(event: MouseEvent): void {
-  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-result], #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-all, [data-delete], [data-delete-page]') : null;
+  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-result], #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-selected, #delete-all, [data-delete], [data-delete-page]') : null;
   if (!target) return;
 
   if (target.dataset.view || target.dataset.page || target.dataset.doc || target.dataset.result || target.id === 'new-doc' || target.id === 'new-page' || target.id === 'meeting' || target.id === 'quick-note' || target.id === 'new-notebook' || target.id === 'export-doc') {
@@ -196,10 +231,11 @@ function onClick(event: MouseEvent): void {
     const doc = state.documents.find((item) => item.id === state.activeDoc);
     if (doc) download(doc.filename, doc.content);
   } else if (target.id === 'export-all') download('notebook-export.json', JSON.stringify(state, null, 2), 'application/json');
-  else if (target.id === 'delete-all' && confirm(t(state.language, 'confirmDeleteAll'))) {
-    const language = state.language;
-    state = { ...structuredClone(initialState), language }; legacyDocuments.clear(); persist(); render(); toast(t(state.language, 'localDataDeleted'));
-  }
+  else if (target.id === 'delete-selected') {
+    const selected = [...(root?.querySelectorAll<HTMLInputElement>('[data-delete-category]:checked') || [])]
+      .map((input) => input.dataset.deleteCategory as DataCategory);
+    deleteLocalData(selected);
+  } else if (target.id === 'delete-all') deleteLocalData(localDataGroups(state).map((group) => group.id), true);
 }
 
 function onInput(event: Event): void {
@@ -214,6 +250,9 @@ function onChange(event: Event): void {
   if (target instanceof HTMLSelectElement && target.id === 'language') {
     state.language = target.value as Language;
     persist(); render();
+  } else if (target instanceof HTMLInputElement && target.dataset.deleteCategory) {
+    const button = root?.querySelector<HTMLButtonElement>('#delete-selected');
+    if (button) button.disabled = !root?.querySelector('[data-delete-category]:checked');
   } else if (target instanceof HTMLInputElement && target.id === 'upload') {
     void importDocument(target.files?.[0]);
   } else if (target instanceof HTMLSelectElement && target.dataset.classify) {

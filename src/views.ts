@@ -1,5 +1,6 @@
 import { AppState, currentPage, Page, searchResults, View } from './domain.js';
 import { classificationLabel, formatDate, pageTitle, t } from './i18n.js';
+import { localDataGroups } from './local-data.js';
 
 export function escapeHtml(value: string | undefined = ''): string {
   return String(value).replace(/[&<>\'"]/g, (character) => ({
@@ -76,5 +77,6 @@ function renderSearch(state: AppState): string {
 
 function renderSettings(state: AppState): string {
   const language = state.language;
-  return `<div class="panel"><h2>${t(language, 'settingsData')}</h2><div class="field"><label for="language">${t(language, 'language')}</label><select id="language"><option value="en" ${language === 'en' ? 'selected' : ''}>${t(language, 'english')}</option><option value="zh" ${language === 'zh' ? 'selected' : ''}>${t(language, 'chinese')}</option></select></div><p class="muted">${t(language, 'storageHint')}</p><div class="actions"><button class="primary" id="export-all">${t(language, 'exportNotebook')}</button><button class="danger" id="delete-all">${t(language, 'deleteAll')}</button></div></div>`;
+  const groups = localDataGroups(state).map((group) => `<label class="settings-row"><input type="checkbox" data-delete-category="${group.id}"><span><strong>${group.label}</strong><span class="muted">${escapeHtml(group.detail)}</span></span></label>`).join('');
+  return `<div class="panel"><h2>${t(language, 'settingsData')}</h2><div class="field"><label for="language">${t(language, 'language')}</label><select id="language"><option value="en" ${language === 'en' ? 'selected' : ''}>${t(language, 'english')}</option><option value="zh" ${language === 'zh' ? 'selected' : ''}>${t(language, 'chinese')}</option></select></div><p class="muted">${t(language, 'storageHint')}</p><section class="settings-data"><h3>${t(language, 'localData')}</h3><p class="muted">${t(language, 'chooseData')} ${t(language, 'deviceFilesUnaffected')}</p><div class="settings-rows">${groups}</div><div class="actions"><button class="danger" id="delete-selected" disabled>${t(language, 'deleteSelected')}</button><button class="danger" id="delete-all">${t(language, 'deleteAll')}</button><button class="secondary" id="export-all">${t(language, 'exportNotebook')}</button></div></section></div>`;
 }

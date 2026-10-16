@@ -61,6 +61,16 @@ button { cursor: pointer; border: 0; }
 .field { display: grid; gap: 6px; margin-bottom: 14px; }
 .field label { font-size: 12px; font-weight: 700; color: var(--muted); }
 .field input, .field textarea, .field select { border: 1px solid var(--line); border-radius: 6px; padding: 9px; width: 100%; }
+.settings-data { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 20px; }
+.settings-data h3 { margin: 0 0 6px; font-size: 16px; }
+.settings-data > p { margin: 0 0 14px; }
+.settings-rows { border-top: 1px solid var(--line); margin-bottom: 16px; }
+.settings-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 2px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.settings-row input { margin: 3px 0 0; flex: none; }
+.settings-row span { min-width: 0; }
+.settings-row strong, .settings-row .muted { display: block; overflow-wrap: anywhere; }
+.settings-row .muted { margin-top: 3px; }
+.settings-data button:disabled { opacity: .5; cursor: not-allowed; }
 .doc-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; }
 .doc-item { padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; text-align: left; }
 .doc-editor { display: block; width: 100%; min-height: max(600px, 65vh); resize: vertical; font-family: ui-monospace, SFMono-Regular, monospace; }
