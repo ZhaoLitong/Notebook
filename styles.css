@@ -41,7 +41,7 @@ button { cursor: pointer; border: 0; }
 .page-item.selected { border-color: var(--teal); box-shadow: 0 0 0 2px #d5efec; }
 .page-item strong { display: block; margin-bottom: 4px; }
 .capture { display: flex; gap: 8px; }
-.capture textarea { min-height: 76px; resize: vertical; flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+.capture textarea { min-height: 220px; resize: vertical; flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
 .capture-actions { display: flex; flex-direction: column; gap: 8px; }
 .icon { width: 42px; padding: 0; }
 .fragment-list { margin-top: 20px; }
@@ -71,6 +71,7 @@ button { cursor: pointer; border: 0; }
   .content { padding: 18px 16px; }
   .layout, .doc-grid { grid-template-columns: 1fr; }
   .capture { flex-direction: column; }
+  .capture textarea { min-height: 160px; }
   .capture-actions { flex-direction: row; }
   .panel { padding: 16px; }
 }
