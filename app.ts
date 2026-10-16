@@ -416,6 +416,7 @@ async function start(): Promise<void> {
   try {
     await store.open();
     state = { ...initialState, ...(await store.load()) };
+    state.view = 'home';
     for (const doc of state.documents) legacyDocuments.set(doc.id, structuredClone(doc));
     state.activeDoc = state.documents.find((doc) => doc.id === state.activeDoc)?.id ?? state.documents[0]?.id;
     state.outbox = state.outbox.filter((item) => !item.type.startsWith('document.'));
