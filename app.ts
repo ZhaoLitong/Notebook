@@ -19,6 +19,7 @@ interface SpeechRecognitionWindow extends Window {
 const root = document.querySelector<HTMLElement>('#app');
 const store = new LocalStateStore();
 let state: AppState = structuredClone(initialState);
+const legacyDocuments = new Map<string, AppState['documents'][number]>();
 
 function render(): void {
   if (!root) return;
@@ -28,16 +29,19 @@ function render(): void {
 
 function persist(): void {
   const emptyIds = new Set(state.pages.filter(isEmptyPage).map((page) => page.id));
-  const savedState = emptyIds.size ? {
+  const savedState: AppState = {
     ...state,
     pages: state.pages.filter((page) => !emptyIds.has(page.id)),
     drafts: Object.fromEntries(Object.entries(state.drafts).filter(([id]) => !emptyIds.has(id))),
     outbox: state.outbox.filter((item) => {
       const payload = item.payload as { id?: string } | undefined;
-      return !(item.type.startsWith('page.') && payload?.id && emptyIds.has(payload.id));
+      return !item.type.startsWith('document.')
+        && !(item.type.startsWith('page.') && payload?.id && emptyIds.has(payload.id));
     }),
     selectedPage: state.selectedPage && emptyIds.has(state.selectedPage) ? undefined : state.selectedPage,
-  } : state;
+    activeDoc: state.activeDoc && legacyDocuments.has(state.activeDoc) ? state.activeDoc : undefined,
+    documents: [...legacyDocuments.values()],
+  };
   try { store.save(savedState); } catch { /* The app remains usable for the current session. */ }
   renderStatus();
 }
@@ -57,6 +61,7 @@ function discardEmptyActiveDocument(): void {
   const doc = state.documents.find((item) => item.id === state.activeDoc);
   if (!doc || doc.content.trim()) return;
   state.documents = state.documents.filter((item) => item.id !== doc.id);
+  legacyDocuments.delete(doc.id);
   state.outbox = state.outbox.filter((item) => {
     const payload = item.payload as { id?: string } | undefined;
     return payload?.id !== doc.id;
@@ -118,7 +123,7 @@ function download(name: string, content: string, type = 'text/plain'): void {
   link.href = URL.createObjectURL(new Blob([content], { type }));
   link.download = name;
   link.click();
-  URL.revokeObjectURL(link.href);
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
 function makePage(template: Page['template'] = 'general'): void {
@@ -181,14 +186,15 @@ function onClick(event: MouseEvent): void {
   } else if (target.id === 'new-doc') {
     const timestamp = now();
     const doc = { id: createId(), filename: 'untitled.md', content: '', createdAt: timestamp, updatedAt: timestamp };
-    state.documents.unshift(doc); state.activeDoc = doc.id; queue('document.create', doc);
-  } else if (target.id === 'save-doc') saveDocument();
+    state.documents.unshift(doc); state.activeDoc = doc.id; render();
+  } else if (target.id === 'save-doc') void saveDocument();
   else if (target.id === 'export-doc') {
+    syncActiveDocumentFromEditor();
     const doc = state.documents.find((item) => item.id === state.activeDoc);
     if (doc) download(doc.filename, doc.content);
   } else if (target.id === 'export-all') download('notebook-export.json', JSON.stringify(state, null, 2), 'application/json');
   else if (target.id === 'delete-all' && confirm('Delete all local notebook data?')) {
-    state = structuredClone(initialState); persist(); render(); toast('Local data deleted');
+    state = structuredClone(initialState); legacyDocuments.clear(); persist(); render(); toast('Local data deleted');
   }
 }
 
@@ -241,23 +247,49 @@ function saveFragment(): void {
   toast('Saved locally');
 }
 
-function saveDocument(): void {
+async function saveDocument(): Promise<void> {
   const doc = state.documents.find((item) => item.id === state.activeDoc);
   const name = document.querySelector<HTMLInputElement>('#doc-name');
   const content = document.querySelector<HTMLTextAreaElement>('#doc-content');
   if (!doc || !name || !content) return;
-  doc.filename = name.value; doc.content = content.value; doc.updatedAt = now();
-  if (!doc.content.trim()) {
+  if (!content.value.trim()) {
     discardEmptyActiveDocument(); render(); return;
   }
-  queue('document.update', doc); toast('Document saved');
+  const filename = name.value.trim() || 'untitled.md';
+  const picker = window as Window & {
+    showSaveFilePicker?: (options: { suggestedName: string }) => Promise<{
+      name: string;
+      createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }>;
+    }>;
+  };
+  if (!picker.showSaveFilePicker) {
+    download(filename, content.value);
+    toast('Download started');
+    return;
+  }
+  try {
+    const handle = await picker.showSaveFilePicker({ suggestedName: filename });
+    const writable = await handle.createWritable();
+    await writable.write(content.value);
+    await writable.close();
+    doc.filename = handle.name;
+    doc.content = content.value;
+    doc.updatedAt = now();
+    legacyDocuments.delete(doc.id);
+    persist();
+    render();
+    toast('Saved to device');
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return;
+    toast('Could not save document');
+  }
 }
 
 async function importDocument(file?: File): Promise<void> {
   if (!file) return;
   const timestamp = now();
   const doc = { id: createId(), filename: file.name, content: await file.text(), createdAt: timestamp, updatedAt: timestamp };
-  state.documents.unshift(doc); state.activeDoc = doc.id; queue('document.create', doc);
+  state.documents.unshift(doc); state.activeDoc = doc.id; render();
 }
 
 function dictate(): void {
@@ -294,6 +326,9 @@ async function start(): Promise<void> {
   try {
     await store.open();
     state = { ...initialState, ...(await store.load()) };
+    for (const doc of state.documents) legacyDocuments.set(doc.id, structuredClone(doc));
+    state.activeDoc = state.documents.find((doc) => doc.id === state.activeDoc)?.id ?? state.documents[0]?.id;
+    state.outbox = state.outbox.filter((item) => !item.type.startsWith('document.'));
     discardEmptyPages(state.pages);
   } catch {
     if (root) root.textContent = 'This browser does not support local storage.';
