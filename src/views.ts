@@ -15,7 +15,7 @@ export function renderApp(state: AppState): string {
     : state.view === 'docs' ? renderDocuments(state)
       : state.view === 'search' ? renderSearch(state)
         : renderSettings();
-  return `<div class="shell">${renderSidebar(state.view)}<main class="main"><header class="topbar"><h1>${viewTitle[state.view]}</h1><input class="search" id="global-search" placeholder="Search notes, tags, files" value="${state.view === 'search' ? escapeHtml(state.query || '') : ''}"></header><section class="content">${content}</section></main></div>`;
+  return `<div class="shell">${renderSidebar(state.view)}<main class="main"><header class="topbar"><h1>${viewTitle[state.view]}</h1><input class="search" id="global-search" placeholder="Search notes, tags, files" value="${state.view === 'search' ? escapeHtml(state.query || '') : ''}"></header><section class="content${state.view === 'docs' ? ' documents-content' : ''}">${content}</section></main></div>`;
 }
 
 function renderSidebar(view: View): string {
