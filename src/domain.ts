@@ -67,8 +67,7 @@ export function searchResults(state: AppState) {
       text: item.content,
       id: item.pageId,
     }));
-  const documents = state.documents.map((doc) => ({ type: 'Document', title: doc.filename, text: doc.content, id: doc.id }));
-  return [...pages, ...fragments, ...documents].filter(
+  return [...pages, ...fragments].filter(
     (item) => !query || `${item.title} ${item.text}`.toLowerCase().includes(query),
   );
 }

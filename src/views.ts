@@ -16,7 +16,7 @@ export function renderApp(state: AppState): string {
       : state.view === 'docs' ? renderDocuments(state)
       : state.view === 'search' ? renderSearch(state)
         : renderSettings();
-  return `<div class="shell">${renderSidebar(state.view)}<main class="main"><header class="topbar"><h1>${viewTitle[state.view]}</h1><input class="search" id="global-search" placeholder="Search notes, tags, files" value="${state.view === 'search' ? escapeHtml(state.query || '') : ''}"></header><section class="content${state.view === 'docs' ? ' documents-content' : ''}">${content}</section></main></div>`;
+  return `<div class="shell">${renderSidebar(state.view)}<main class="main"><header class="topbar"><h1>${viewTitle[state.view]}</h1><input class="search" id="global-search" placeholder="Search pages and notes" value="${state.view === 'search' ? escapeHtml(state.query || '') : ''}"></header><section class="content${state.view === 'docs' ? ' documents-content' : ''}">${content}</section></main></div>`;
 }
 
 function renderSidebar(view: View): string {
@@ -65,7 +65,7 @@ function renderDocuments(state: AppState): string {
 function renderSearch(state: AppState): string {
   const query = (state.query || '').trim();
   const results = searchResults(state);
-  return `<div class="panel"><h2>${query ? `Results for "${escapeHtml(query)}"` : 'Search your notebook'}</h2>${results.map((item) => `<button class="page-item" data-result="${item.id}" data-type="${item.type}"><strong>${escapeHtml(item.title)}</strong><div>${escapeHtml(item.text.slice(0, 180))}</div><span class="muted">${escapeHtml(item.type)}</span></button>`).join('') || '<div class="empty">No matches.</div>'}</div>`;
+  return `<div class="panel"><h2>${query ? `Results for "${escapeHtml(query)}"` : 'Search your notebook'}</h2>${results.map((item) => `<button class="page-item" data-result="${item.id}"><strong>${escapeHtml(item.title)}</strong><div>${escapeHtml(item.text.slice(0, 180))}</div><span class="muted">${escapeHtml(item.type)}</span></button>`).join('') || '<div class="empty">No matches.</div>'}</div>`;
 }
 
 function renderSettings(): string {

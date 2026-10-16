@@ -149,8 +149,7 @@ function onClick(event: MouseEvent): void {
   else if (target.dataset.page) { state.selectedPage = target.dataset.page; state.view = 'home'; render(); }
   else if (target.dataset.doc) { state.activeDoc = target.dataset.doc; render(); }
   else if (target.dataset.result) {
-    if (target.dataset.type === 'Document') { state.activeDoc = target.dataset.result; state.view = 'docs'; }
-    else { state.selectedPage = target.dataset.result; state.view = 'home'; }
+    state.selectedPage = target.dataset.result; state.view = 'home';
     render();
   } else if (target.id === 'new-page') makePage();
   else if (target.id === 'meeting') makePage('meeting');
