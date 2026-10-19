@@ -24,6 +24,13 @@ export interface Fragment {
   deletedAt?: string;
 }
 export interface DocumentRecord { id: string; filename: string; content: string; createdAt: string; updatedAt: string }
+export interface Revision {
+  id: string;
+  resource: string;
+  createdAt: string;
+  label: string;
+  snapshot: DocumentRecord | { page: Page; fragments: Fragment[]; draft: string };
+}
 export interface OutboxEvent {
   id: string;
   type: string;
