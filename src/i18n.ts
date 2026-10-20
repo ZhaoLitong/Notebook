@@ -2,6 +2,7 @@ import type { Classification, Language, Page } from './domain.js';
 
 const en = {
   brand: 'Notebook', mic: 'Mic',
+  cancel: 'Cancel', continueAction: 'Continue', createNotebook: 'Create notebook', deleteAction: 'Delete',
   homeTitle: 'Capture and review', notesTitle: 'Notes', docsTitle: 'Documents', searchTitle: 'Search', settingsTitle: 'Settings',
   recentPages: 'Recent pages', allNotes: 'All notes', textDocuments: 'Text documents', searchPlaceholder: 'Search pages and notes',
   yourNotebook: 'Your notebook', captureHint: 'Capture fragments as you think.', startHint: 'Start with a page or a quick note.',
@@ -43,6 +44,7 @@ export type TranslationKey = keyof typeof en;
 
 const zh: Record<TranslationKey, string> = {
   brand: '笔记本', mic: '语音',
+  cancel: '取消', continueAction: '继续', createNotebook: '创建笔记本', deleteAction: '删除',
   homeTitle: '记录与回顾', notesTitle: '笔记', docsTitle: '文档', searchTitle: '搜索', settingsTitle: '设置',
   recentPages: '最近页面', allNotes: '所有笔记', textDocuments: '文本文档', searchPlaceholder: '搜索页面和笔记',
   yourNotebook: '我的笔记本', captureHint: '随时记录想法。', startHint: '创建页面或快速笔记。',

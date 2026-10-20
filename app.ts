@@ -196,8 +196,8 @@ function hasUnsavedDocument(): boolean {
     && !!(doc.content.trim() || doc.filename !== 'untitled.md');
 }
 
-function allowDocumentReplacement(): boolean {
-  return !hasUnsavedDocument() || confirm(t(state.language, 'unsavedDocument'));
+async function allowDocumentReplacement(): Promise<boolean> {
+  return !hasUnsavedDocument() || await confirmOverlay(t(state.language, 'unsavedDocument'), t(state.language, 'unsavedDocument'));
 }
 
 function replaceDocument(doc: AppState['documents'][number]): void {
@@ -273,6 +273,46 @@ function toast(message: string): void {
   setTimeout(() => item.remove(), 2200);
 }
 
+type ModalOptions = { title: string; message?: string; confirmLabel: string; destructive?: boolean; inputLabel?: string };
+
+function showModal(options: ModalOptions): Promise<string | boolean> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h2 id="modal-title"></h2>${options.message ? '<p class="modal-message"></p>' : ''}${options.inputLabel ? '<div class="field"><label for="modal-input"></label><input id="modal-input" autocomplete="off"></div>' : ''}<div class="modal-actions"><button class="secondary" data-modal-cancel></button><button data-modal-confirm></button></div></section>`;
+    overlay.querySelector<HTMLElement>('#modal-title')!.textContent = options.title;
+    const message = overlay.querySelector<HTMLElement>('.modal-message');
+    if (message) message.textContent = options.message || '';
+    const label = overlay.querySelector<HTMLLabelElement>('label');
+    if (label) label.textContent = options.inputLabel || '';
+    const cancel = overlay.querySelector<HTMLButtonElement>('[data-modal-cancel]')!;
+    const confirm = overlay.querySelector<HTMLButtonElement>('[data-modal-confirm]')!;
+    const input = overlay.querySelector<HTMLInputElement>('#modal-input');
+    cancel.textContent = t(state.language, 'cancel');
+    confirm.textContent = options.confirmLabel;
+    confirm.className = options.destructive ? 'danger' : 'primary';
+    const finish = (accepted: boolean) => {
+      document.body.classList.remove('has-modal');
+      overlay.remove();
+      resolve(accepted ? (input ? input.value.trim() : true) : false);
+    };
+    cancel.addEventListener('click', () => finish(false));
+    confirm.addEventListener('click', () => { if (!input || input.value.trim()) finish(true); });
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) finish(false); });
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') finish(false);
+      else if (event.key === 'Enter' && (!input || input.value.trim())) { event.preventDefault(); finish(true); }
+    });
+    document.body.classList.add('has-modal');
+    document.body.append(overlay);
+    (input || cancel).focus();
+  });
+}
+
+async function confirmOverlay(title: string, message: string, destructive = false): Promise<boolean> {
+  return await showModal({ title, message, destructive, confirmLabel: destructive ? t(state.language, 'deleteAction') : t(state.language, 'continueAction') }) === true;
+}
+
 function download(name: string, content: string, type = 'text/plain'): void {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([content], { type }));
@@ -293,11 +333,11 @@ function makePage(template: Page['template'] = 'general'): void {
   queue('page.create', page);
 }
 
-function deleteLocalData(categories: DataCategory[], all = false): void {
+async function deleteLocalData(categories: DataCategory[], all = false): Promise<void> {
   const groups = localDataGroups(state).filter((group) => categories.includes(group.id));
   if (!groups.length) return;
   const message = `${t(state.language, all ? 'confirmDeleteAllData' : 'confirmDeleteSelected')}\n\n${groups.map((group) => `${group.label}: ${group.detail}`).join('\n')}\n\n${t(state.language, 'deviceFilesUnaffected')}`;
-  if (!confirm(message)) return;
+  if (!await confirmOverlay(t(state.language, all ? 'confirmDeleteAllData' : 'confirmDeleteSelected'), message, true)) return;
 
   history = undefined;
   if (documentCheckpoint) { clearTimeout(documentCheckpoint); documentCheckpoint = undefined; }
@@ -338,7 +378,7 @@ function deleteLocalData(categories: DataCategory[], all = false): void {
   persist(); render(); toast(t(state.language, 'localDataDeleted'));
 }
 
-function onClick(event: MouseEvent): void {
+async function onClick(event: MouseEvent): Promise<void> {
   const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-view], [data-page], [data-doc], [data-doc-mode], [data-result], [data-history], [data-revision], #close-history, #restore-revision, #new-page, #meeting, #quick-note, #new-notebook, #save-fragment, #dictate, #new-doc, #save-doc, #export-doc, #export-all, #delete-selected, #delete-all, #choose-note-directory, #disconnect-note-directory, [data-delete], [data-delete-page]') : null;
   if (!target) return;
 
@@ -347,8 +387,8 @@ function onClick(event: MouseEvent): void {
   if (target.id === 'close-history') { history = undefined; render(); return; }
   if (target.id === 'restore-revision') { restoreRevision(); return; }
 
-  if (state.view === 'docs' && target.dataset.view && target.dataset.view !== 'docs' && !allowDocumentReplacement()) return;
-  if (target.id === 'new-doc' && !allowDocumentReplacement()) return;
+  if (state.view === 'docs' && target.dataset.view && target.dataset.view !== 'docs' && !await allowDocumentReplacement()) return;
+  if (target.id === 'new-doc' && !await allowDocumentReplacement()) return;
 
   if (target.dataset.view || target.dataset.doc || target.dataset.page || target.dataset.result || target.id === 'new-doc' || target.id === 'new-page' || target.id === 'meeting') {
     if (documentCheckpoint) { clearTimeout(documentCheckpoint); documentCheckpoint = undefined; }
@@ -373,8 +413,8 @@ function onClick(event: MouseEvent): void {
   else if (target.id === 'meeting') makePage('meeting');
   else if (target.id === 'quick-note') { if (!currentPage(state)) makePage(); else document.querySelector<HTMLTextAreaElement>('#capture')?.focus(); }
   else if (target.id === 'new-notebook') {
-    const name = prompt(t(state.language, 'notebookName'));
-    if (name) { const notebook = { id: createId(), name }; state.notebooks.push(notebook); queue('notebook.create', notebook); }
+    const name = await showModal({ title: t(state.language, 'newNotebook'), inputLabel: t(state.language, 'notebookName'), confirmLabel: t(state.language, 'createNotebook') });
+    if (typeof name === 'string' && name) { const notebook = { id: createId(), name }; state.notebooks.push(notebook); queue('notebook.create', notebook); }
   } else if (target.id === 'save-fragment') saveFragment();
   else if (target.id === 'choose-note-directory') void chooseNoteDirectory();
   else if (target.id === 'disconnect-note-directory') {
@@ -384,13 +424,13 @@ function onClick(event: MouseEvent): void {
   }
   else if (target.id === 'dictate') dictate();
   else if (target.dataset.delete) {
-    if (confirm(t(state.language, 'confirmDeleteNote'))) {
+    if (await confirmOverlay(t(state.language, 'confirmDeleteNote'), t(state.language, 'confirmDeleteNote'), true)) {
       const fragment = state.fragments.find((item) => item.id === target.dataset.delete);
       if (fragment) { const page = state.pages.find((item) => item.id === fragment.pageId); if (page) checkpointPage(page, 'Before note deletion'); fragment.deletedAt = now(); if (page) checkpointPage(page, 'Note deleted'); queue('fragment.delete', fragment); }
     }
   } else if (target.dataset.deletePage) {
     const page = state.pages.find((item) => item.id === target.dataset.deletePage);
-    if (page && confirm(`${t(state.language, 'confirmDeletePage')} "${pageTitle(page, state.language)}"`)) {
+    if (page && await confirmOverlay(t(state.language, 'confirmDeletePage'), `${t(state.language, 'confirmDeletePage')} "${pageTitle(page, state.language)}"`, true)) {
       const fragmentIds = new Set(state.fragments.filter((item) => item.pageId === page.id).map((item) => item.id));
       historyWrites = historyWrites.then(() => store.deleteRevisions(`page:${page.id}`)).catch(() => toast(t(state.language, 'historyFailed')));
       state.pages = state.pages.filter((item) => item.id !== page.id);
@@ -420,8 +460,8 @@ function onClick(event: MouseEvent): void {
   else if (target.id === 'delete-selected') {
     const selected = [...(root?.querySelectorAll<HTMLInputElement>('[data-delete-category]:checked') || [])]
       .map((input) => input.dataset.deleteCategory as DataCategory);
-    deleteLocalData(selected);
-  } else if (target.id === 'delete-all') deleteLocalData(localDataGroups(state).map((group) => group.id), true);
+    await deleteLocalData(selected);
+  } else if (target.id === 'delete-all') await deleteLocalData(localDataGroups(state).map((group) => group.id), true);
 }
 
 function onInput(event: Event): void {
@@ -442,7 +482,7 @@ function onInput(event: Event): void {
   }
 }
 
-function onChange(event: Event): void {
+async function onChange(event: Event): Promise<void> {
   const target = event.target;
   if (target instanceof HTMLSelectElement && target.id === 'language') {
     state.language = target.value as Language;
@@ -454,7 +494,7 @@ function onChange(event: Event): void {
     void importDocument(target.files?.[0]);
     target.value = '';
   } else if (target instanceof HTMLSelectElement && target.id === 'stored-doc' && target.value) {
-    if (!allowDocumentReplacement()) { target.value = ''; return; }
+    if (!await allowDocumentReplacement()) { target.value = ''; return; }
     if (documentCheckpoint) { clearTimeout(documentCheckpoint); documentCheckpoint = undefined; }
     const doc = state.documents.find((item) => item.id === target.value);
     if (doc) replaceDocument(doc);
@@ -480,10 +520,10 @@ function onChange(event: Event): void {
   }
 }
 
-function onKeyDown(event: KeyboardEvent): void {
+async function onKeyDown(event: KeyboardEvent): Promise<void> {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.id === 'global-search' && event.key === 'Enter') {
-    if (state.view === 'docs' && !allowDocumentReplacement()) return;
+    if (state.view === 'docs' && !await allowDocumentReplacement()) return;
     discardEmptyActiveDocument(); discardEmptyCurrentPage(); state.query = target.value; state.view = 'search'; render();
   } else if (target instanceof HTMLTextAreaElement && target.id === 'capture' && event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault(); saveFragment();
@@ -586,7 +626,7 @@ async function saveDocument(): Promise<void> {
 async function importDocument(file?: File): Promise<void> {
   if (!file) return;
   if (!/\.(md|markdown|txt)$/i.test(file.name)) { toast(t(state.language, 'invalidDocument')); return; }
-  if (!allowDocumentReplacement()) return;
+  if (!await allowDocumentReplacement()) return;
   const timestamp = now();
   const doc = { id: createId(), filename: file.name, content: await file.text(), createdAt: timestamp, updatedAt: timestamp };
   replaceDocument(doc);
